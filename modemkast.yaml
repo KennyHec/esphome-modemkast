@@ -18,16 +18,19 @@ esphome:
                 return id(g_ki);
             kd: !lambda
                 return id(g_kd);
-        - climate.pid.reset_integral_term: regelaar                
         - climate.control:
             id: regelaar
             mode: "COOL"
+        - climate.pid.reset_integral_term: regelaar  
 
 logger:
   level: DEBUG
   logs: 
     climate: ERROR
     dht: ERROR
+    sensor: ERROR
+    number: ERROR
+    binary_sensor: ERROR
 
 api:
 ota:
@@ -36,7 +39,7 @@ captive_portal:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  #  fast_connect: True
+  #fast_connect: True
   manual_ip:
     static_ip: 192.168.1.35
     gateway: 192.168.1.1
@@ -65,10 +68,30 @@ globals:
     restore_value: yes
     initial_value: '0.0'
 
+number:
+  - platform: template
+    name: "Ventilator Snelheid (Manueel)"
+    id: vent_speed
+    optimistic: true
+    min_value: 0
+    max_value: 1
+    step: 0.01
+    on_value:
+      - lambda: |-
+          if (id(fan_speeder).state == 1 ) {
+            pwm_out->set_min_power(id(vent_speed).state);
+          } 
+
 text_sensor:
   - platform: wifi_info
     ip_address:
       name: $friendly_name IP Address
+
+binary_sensor:
+  - platform: template
+    name: "Manual Fan Speed"
+    id: "man_fan"
+    internal: true
 
 sensor:
   - platform: wifi_signal
@@ -93,7 +116,8 @@ sensor:
     unit_of_measurement: ""
     accuracy_decimals: 4
   - platform: pid
-    name: "Ventilator snelheid (PWM Spanning)"
+    id: vent_pwm
+    name: "Ventilator Snelheid (PWM Spanning)"
     climate_id: regelaar
     type: COOL
   - platform: homeassistant
@@ -113,8 +137,8 @@ sensor:
     pin: GPIO3
     model: DHT11
     temperature:
-      name: "Temperature"
-      id: console_fan_temperature
+      name: "Temperatuur"
+      id: internal_temp
       accuracy_decimals: 2
       filters:
         - exponential_moving_average:  
@@ -134,8 +158,8 @@ sensor:
               return last_value_t;
             }
     humidity:
-      name: "Humidity"
-      id: console_fan_humidity
+      name: "Vochtigheid"
+      id: internal_vochtigheid
       filters:
         - lambda: |-
             float MAX_DIFFERENCE = 2.0;
@@ -156,7 +180,7 @@ sensor:
     pin: GPIO14
     model: DHT11
     temperature:
-      name: "Temperature EX"
+      name: "Temperatuur extern"
       id: external_temperature
       accuracy_decimals: 2
       filters:
@@ -177,7 +201,7 @@ sensor:
               return last_value_t;
             }
     humidity:
-      name: "Humidity EX"
+      name: "Vochtigheid extern"
       id: external_humidity
       filters:
         - lambda: |-
@@ -203,26 +227,11 @@ output:
     min_power: 0%
     max_power: 100%
 
-fan:
-  - platform: speed
-    output: pwm_out
-#    id: fan_out
-    name: "Ventilator Snelheid"
-    on_turn_on:
-        - climate.control:
-            id: regelaar
-            mode: "OFF"
-    on_turn_off:
-      then:
-        - climate.control:
-            id: regelaar
-            mode: "COOL"
-      
 climate:
   - platform: pid
     name: "Modemkast Thermostaat"
     id: regelaar
-    sensor: console_fan_temperature
+    sensor: internal_temp
     default_target_temperature: 25°C
     cool_output: pwm_out
     visual:
@@ -234,6 +243,25 @@ climate:
       kd: 0.5
 
 switch:
+  - platform: template
+    name: "Ventilator Snelheid (Manueel)"
+    id: fan_speeder
+    lambda: |-
+      if (id(man_fan).state) {
+        return true;
+      } else {
+        return false;
+      }
+    turn_on_action:
+      - lambda: |-
+          id(man_fan).publish_state(true);
+          pwm_out->set_min_power(id(vent_speed).state);
+    turn_off_action:
+      - lambda: |-
+          id(man_fan).publish_state(false);
+          pwm_out->set_min_power(0);      
+          pwm_out->set_max_power(1);
+          
   - platform: restart
     name: "Restart"
   - platform: template
@@ -265,13 +293,14 @@ switch:
           data:
             entity_id: input_number.d_coefficient
             value: !lambda return id(kd).state;
+            
   - platform: template
     name: "Reset Integraal"
     turn_on_action:
       - climate.pid.reset_integral_term: regelaar
       
   - platform: template
-    name: "PID Instellingen Bewaren"
+    name: "PID Instellingen opslaan op ESP"
     turn_on_action:
       - climate.pid.set_control_parameters:
           id: regelaar
