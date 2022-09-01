@@ -41,11 +41,11 @@ wifi:
   password: !secret wifi_password
   #fast_connect: True
   manual_ip:
-    static_ip: 192.168.0.xx
+    #static_ip: 192.168.0.xx
     gateway: 192.168.0.1
     subnet: 255.255.255.0
   ap:
-    ssid: "Esphome-Modemkast-527D13"
+    ssid: "Esphome-Modemkast"
     password: "changeme"
 
 web_server:
@@ -70,6 +70,7 @@ globals:
 
 number:
   - platform: template
+    icon: mdi:fan
     name: "Ventilator Snelheid (Manueel)"
     id: vent_speed
     optimistic: true
@@ -119,6 +120,7 @@ sensor:
     id: vent_pwm
     name: "Ventilator Snelheid (PWM Spanning)"
     climate_id: regelaar
+    icon: mdi:fan
     type: COOL
   - platform: homeassistant
     name: "P Coefficient"
@@ -246,6 +248,7 @@ switch:
   - platform: template
     name: "Ventilator Snelheid (Manueel)"
     id: fan_speeder
+    icon: mdi:fan
     lambda: |-
       if (id(man_fan).state) {
         return true;
@@ -264,7 +267,9 @@ switch:
           
   - platform: restart
     name: "Restart"
+    
   - platform: template
+    icon: mdi:upload
     name: "PID Instellen"
     turn_on_action:
       - climate.pid.set_control_parameters:
@@ -275,7 +280,9 @@ switch:
               return id(i_coefficient).state;
           kd: !lambda
               return id(d_coefficient).state;
+              
   - platform: template
+    icon: mdi:download
     name: "PID Waarden laden"
     turn_on_action:
       - homeassistant.service:
@@ -295,11 +302,13 @@ switch:
             value: !lambda return id(kd).state;
             
   - platform: template
+    icon: mdi:math-integral-box
     name: "Reset Integraal"
     turn_on_action:
       - climate.pid.reset_integral_term: regelaar
       
   - platform: template
+    icon: mdi:content-save
     name: "PID Instellingen opslaan op ESP"
     turn_on_action:
       - climate.pid.set_control_parameters:
