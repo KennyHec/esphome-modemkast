@@ -1,0 +1,296 @@
+substitutions:
+  time_timezone: "Europe/Brussels"
+  version: "2.0"
+  device_description: Temperatuurlogger en ventilator controller Modemkast
+  friendly_name:  Modemkast
+
+esphome:
+  name: "modemkast"
+  platform: esp8266
+  board: nodemcuv2
+  on_boot:
+    then:
+        - climate.pid.set_control_parameters:
+            id: regelaar
+            kp: !lambda
+                return id(g_kp);
+            ki: !lambda
+                return id(g_ki);
+            kd: !lambda
+                return id(g_kd);
+        - climate.pid.reset_integral_term: regelaar                
+        - climate.control:
+            id: regelaar
+            mode: "COOL"
+
+logger:
+  level: DEBUG
+  logs: 
+    climate: ERROR
+    dht: ERROR
+
+api:
+ota:
+captive_portal:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  #  fast_connect: True
+  manual_ip:
+    static_ip: 192.168.1.35
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+  ap:
+    ssid: "Esphome-Modemkast-527D13"
+    password: "SUuR6vjHXFDA"
+
+web_server:
+  port: 80
+  auth:
+    username: espfan
+    password: espfan
+
+globals:
+  - id: g_kp
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+  - id: g_ki
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+  - id: g_kd
+    type: float
+    restore_value: yes
+    initial_value: '0.0'
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: $friendly_name IP Address
+
+sensor:
+  - platform: wifi_signal
+    name: $friendly_name WiFi Strength
+    update_interval: 60s
+  - platform: pid
+    name: "P-Factor"
+    id: kp
+    type: KP
+    unit_of_measurement: ""
+    accuracy_decimals: 4
+  - platform: pid
+    name: "I-Factor"
+    id: ki
+    type: KI
+    unit_of_measurement: ""
+    accuracy_decimals: 4
+  - platform: pid
+    name: "D-Factor"
+    id: kd
+    type: KD
+    unit_of_measurement: ""
+    accuracy_decimals: 4
+  - platform: pid
+    name: "Ventilator snelheid (PWM Spanning)"
+    climate_id: regelaar
+    type: COOL
+  - platform: homeassistant
+    name: "P Coefficient"
+    entity_id: input_number.p_coefficient
+    id: p_coefficient
+  - platform: homeassistant
+    name: "I Coefficient"
+    entity_id: input_number.i_coefficient
+    id: i_coefficient
+  - platform: homeassistant
+    name: "D Coefficient"
+    entity_id: input_number.d_coefficient
+    id: d_coefficient
+
+  - platform: dht
+    pin: GPIO3
+    model: DHT11
+    temperature:
+      name: "Temperature"
+      id: console_fan_temperature
+      accuracy_decimals: 2
+      filters:
+        - exponential_moving_average:  
+            alpha: 0.1
+            send_every: 1
+        - lambda: |-
+            float MAX_DIFFERENCE = 2.0;
+            static float last_value_t = NAN;
+            static int count_missed_t = 0;
+            if (count_missed_t == 3) last_value_t = x;
+            if (isnan(last_value_t) || std::abs(x - last_value_t) < MAX_DIFFERENCE) {
+              count_missed_t = 0;
+              return last_value_t = x;
+            } else {
+              count_missed_t += 1;
+              ESP_LOGW("main", "Missed Temperature Data %d", count_missed_t);
+              return last_value_t;
+            }
+    humidity:
+      name: "Humidity"
+      id: console_fan_humidity
+      filters:
+        - lambda: |-
+            float MAX_DIFFERENCE = 2.0;
+            static float last_value_t = NAN;
+            static int count_missed_t = 0;
+            if (count_missed_t == 3) last_value_t = x;
+            if (isnan(last_value_t) || std::abs(x - last_value_t) < MAX_DIFFERENCE) {
+              count_missed_t = 0;
+              return last_value_t = x;
+            } else {
+              count_missed_t += 1;
+              ESP_LOGW("main", "Missed Temperature Data %d", count_missed_t);
+              return last_value_t;
+            }
+    update_interval: 2s
+    
+  - platform: dht
+    pin: GPIO14
+    model: DHT11
+    temperature:
+      name: "Temperature EX"
+      id: external_temperature
+      accuracy_decimals: 2
+      filters:
+        - exponential_moving_average:  
+            alpha: 0.1
+            send_every: 1
+        - lambda: |-
+            float MAX_DIFFERENCE = 2.0;
+            static float last_value_t = NAN;
+            static int count_missed_t = 0;
+            if (count_missed_t == 3) last_value_t = x;
+            if (isnan(last_value_t) || std::abs(x - last_value_t) < MAX_DIFFERENCE) {
+              count_missed_t = 0;
+              return last_value_t = x;
+            } else {
+              count_missed_t += 1;
+              ESP_LOGW("main", "Missed Temperature Data %d", count_missed_t);
+              return last_value_t;
+            }
+    humidity:
+      name: "Humidity EX"
+      id: external_humidity
+      filters:
+        - lambda: |-
+            float MAX_DIFFERENCE = 2.0;
+            static float last_value_t = NAN;
+            static int count_missed_t = 0;
+            if (count_missed_t == 3) last_value_t = x;
+            if (isnan(last_value_t) || std::abs(x - last_value_t) < MAX_DIFFERENCE) {
+              count_missed_t = 0;
+              return last_value_t = x;
+            } else {
+              count_missed_t += 1;
+              ESP_LOGW("main", "Missed Temperature Data %d", count_missed_t);
+              return last_value_t;
+            }
+    update_interval: 2s
+
+output:
+  - platform: esp8266_pwm
+    pin: GPIO5
+    id: pwm_out
+    frequency: 25000 Hz
+    min_power: 0%
+    max_power: 100%
+
+fan:
+  - platform: speed
+    output: pwm_out
+#    id: fan_out
+    name: "Ventilator Snelheid"
+    on_turn_on:
+        - climate.control:
+            id: regelaar
+            mode: "OFF"
+    on_turn_off:
+      then:
+        - climate.control:
+            id: regelaar
+            mode: "COOL"
+      
+climate:
+  - platform: pid
+    name: "Modemkast Thermostaat"
+    id: regelaar
+    sensor: console_fan_temperature
+    default_target_temperature: 25°C
+    cool_output: pwm_out
+    visual:
+      min_temperature: 18 °C
+      max_temperature: 50 °C
+    control_parameters:
+      kp: 0.15
+      ki: 0.004
+      kd: 0.5
+
+switch:
+  - platform: restart
+    name: "Restart"
+  - platform: template
+    name: "PID Instellen"
+    turn_on_action:
+      - climate.pid.set_control_parameters:
+          id: regelaar
+          kp: !lambda
+              return id(p_coefficient).state;
+          ki: !lambda
+              return id(i_coefficient).state;
+          kd: !lambda
+              return id(d_coefficient).state;
+  - platform: template
+    name: "PID Waarden laden"
+    turn_on_action:
+      - homeassistant.service:
+          service: input_number.set_value
+          data:
+            entity_id: input_number.p_coefficient
+            value: !lambda return id(kp).state;
+      - homeassistant.service:
+          service: input_number.set_value
+          data:
+            entity_id: input_number.i_coefficient
+            value: !lambda return id(ki).state;
+      - homeassistant.service:
+          service: input_number.set_value
+          data:
+            entity_id: input_number.d_coefficient
+            value: !lambda return id(kd).state;
+  - platform: template
+    name: "Reset Integraal"
+    turn_on_action:
+      - climate.pid.reset_integral_term: regelaar
+      
+  - platform: template
+    name: "PID Instellingen Bewaren"
+    turn_on_action:
+      - climate.pid.set_control_parameters:
+          id: regelaar
+          kp: !lambda
+              return id(p_coefficient).state;
+          ki: !lambda
+              return id(i_coefficient).state;
+          kd: !lambda
+              return id(d_coefficient).state;
+      - globals.set:
+          id: g_kp
+          value:  !lambda
+                  return id(p_coefficient).state;
+      - globals.set:
+          id: g_ki
+          value:  !lambda
+                  return id(i_coefficient).state;
+      - globals.set:
+          id: g_kd
+          value:  !lambda
+                  return id(d_coefficient).state;
+
